@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=64.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nanoqwenvl"
+version = "0.1.0"
+description = "NanoQwenVL – VLM do zero em PyTorch"
+requires-python = ">=3.10"
+dependencies = [
+    "torch>=2.0.0",
+    "torchvision>=0.15.0",
+    "transformers>=4.30.0",
+    "tqdm>=4.60.0",
+    "Pillow>=9.0.0",
+    "pyyaml>=6.0",
+]
+
+[tool.setuptools.packages.find]
+include = ["nanoqwenvl*"]

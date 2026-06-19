@@ -1,0 +1,46 @@
+model:
+  vit:
+    patch_size: 16
+    image_size: 224
+    hidden_size: 256
+    num_layers: 6
+    num_heads: 4
+    intermediate_size: 1024
+  projector:
+    hidden_size: 256
+    projector_hidden_size: 512
+  decoder:
+    hidden_size: 256
+    num_layers: 6
+    num_heads: 8
+    head_dim: 32
+    intermediate_size: 512
+    vocab_size: 50257
+    max_position_embeddings: 2048
+    rope_theta: 10000.0
+
+data:
+  dataset_type: flickr8k
+  annotation_dir: /tmp/flickr8k/text
+  image_dir: null
+  synthetic: true
+  max_samples: 500
+  max_seq_length: 64
+  # Se definido, vira img+prompt→resposta:
+  prompt_template: "Describe this image:"
+  # Se null, mantém BOS → caption (img→caption)
+  # prompt_template: null
+
+  # Para dataset_type: csv
+  # csv_train: data/train.csv
+  # csv_val: data/val.csv
+  # Formato CSV: image_path\tcaption
+
+training:
+  batch_size: 16
+  learning_rate: 0.0003
+  weight_decay: 0.1
+  num_epochs: 10
+  gradient_clip: 1.0
+  checkpoint_dir: checkpoints
+  resume: null
