@@ -19,7 +19,7 @@ from transformers import AutoTokenizer
 
 from nanoqwenvl import NanoQwenVL
 from nanoqwenvl.config import load_config
-from nanoqwenvl.dataset import Flickr8kLocal, CsvCaptionDataset, collate_fn
+from nanoqwenvl.dataset import Flickr8kHF, Flickr8kLocal, CsvCaptionDataset, DriveLMNuScenesDataset, collate_fn
 from nanoqwenvl.trainer import Trainer
 
 
@@ -43,7 +43,30 @@ def create_dataset(cfg, split, transform, tokenizer):
     dtype = dc.get("dataset_type", "flickr8k")
     prompt = dc.get("prompt_template")
 
-    if dtype == "flickr8k":
+    if dtype == "drivelm_nus":
+        if split != "train":
+            return None  # só tem split train
+        return DriveLMNuScenesDataset(
+            split=split,
+            transform=transform,
+            tokenizer=tokenizer,
+            max_length=dc.get("max_seq_length", 128),
+            max_samples=dc.get("max_samples"),
+            prompt_template=prompt,
+            synthetic=dc.get("synthetic", False),
+            nuscenes_root=dc.get("nuscenes_root"),
+        )
+    elif dtype == "flickr8k_hf":
+        return Flickr8kHF(
+            split=split,
+            transform=transform,
+            tokenizer=tokenizer,
+            max_length=dc.get("max_seq_length", 64),
+            max_samples=dc.get("max_samples"),
+            prompt_template=prompt,
+            synthetic=dc.get("synthetic", False),
+        )
+    elif dtype == "flickr8k":
         return Flickr8kLocal(
             split=split,
             transform=transform,
@@ -96,7 +119,8 @@ def main():
 
     prompt_label = config.get("data", {}).get("prompt_template", "null")
     print(f"Modo: {'img + \"' + prompt_label + '\" → resposta' if prompt_label else 'img → caption'}")
-    print(f"   num_prompt_tokens (por amostra): {train_ds.num_prompt_tokens}")
+    if hasattr(train_ds, "num_prompt_tokens"):
+        print(f"   num_prompt_tokens (fixo): {train_ds.num_prompt_tokens}")
     print(f"Train: {len(train_ds)} samples")
 
     collate = lambda b: collate_fn(b, pad_token_id)
@@ -114,7 +138,8 @@ def main():
 
     trainer_cfg = dict(config["training"])
     trainer_cfg["pad_token_id"] = pad_token_id
-    trainer_cfg["num_prompt_tokens"] = train_ds.num_prompt_tokens
+    if hasattr(train_ds, "num_prompt_tokens"):
+        trainer_cfg["num_prompt_tokens"] = train_ds.num_prompt_tokens
     trainer = Trainer(model, trainer_cfg, device)
     trainer.fit(train_loader, val_loader)
 

@@ -48,11 +48,16 @@ class Trainer:
         self.model.train()
         total = 0
         progress = tqdm(loader, desc="Train")
-        for pixel_values, input_ids in progress:
+        for batch in progress:
+            if len(batch) == 3:
+                pixel_values, input_ids, prompt_lens = batch
+            else:
+                pixel_values, input_ids = batch
+                prompt_lens = None
             pixel_values = pixel_values.to(self.device)
             input_ids = input_ids.to(self.device)
             logits = self.model(pixel_values, input_ids)
-            loss = self._loss_fn(logits, input_ids)
+            loss = self._loss_fn(logits, input_ids, prompt_lens)
 
             self.optimizer.zero_grad()
             loss.backward()
@@ -68,21 +73,27 @@ class Trainer:
     def _evaluate(self, loader):
         self.model.eval()
         total = 0
-        for pixel_values, input_ids in tqdm(loader, desc="Val"):
+        for batch in tqdm(loader, desc="Val"):
+            if len(batch) == 3:
+                pixel_values, input_ids, prompt_lens = batch
+            else:
+                pixel_values, input_ids = batch
+                prompt_lens = None
             pixel_values = pixel_values.to(self.device)
             input_ids = input_ids.to(self.device)
             logits = self.model(pixel_values, input_ids)
-            loss = self._loss_fn(logits, input_ids)
+            loss = self._loss_fn(logits, input_ids, prompt_lens)
             total += loss.item()
         return total / len(loader)
 
-    def _loss_fn(self, logits, input_ids):
+    def _loss_fn(self, logits, input_ids, prompt_lens=None):
         from .dataset import compute_loss
         pad_token_id = self.config.get("pad_token_id", 0)
         return compute_loss(
             logits, input_ids,
             self.model.num_visual_tokens,
             pad_token_id,
+            prompt_lens=prompt_lens,
             num_prompt_tokens=self.num_prompt_tokens,
         )
 

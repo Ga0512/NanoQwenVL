@@ -20,27 +20,19 @@ model:
     rope_theta: 10000.0
 
 data:
-  dataset_type: flickr8k
-  annotation_dir: /tmp/flickr8k/text
-  image_dir: null
-  synthetic: true
-  max_samples: 500
-  max_seq_length: 64
-  # Se definido, vira img+prompt→resposta:
-  prompt_template: "Describe this image:"
-  # Se null, mantém BOS → caption (img→caption)
-  # prompt_template: null
-
-  # Para dataset_type: csv
-  # csv_train: data/train.csv
-  # csv_val: data/val.csv
-  # Formato CSV: image_path\tcaption
+  # flickr8k_hf | flickr8k | csv | drivelm_nus
+  dataset_type: drivelm_nus
+  synthetic: false
+  max_samples: null
+  max_seq_length: 256
+  prompt_template: null
+  nuscenes_root: /content/nuscenes/samples
 
 training:
-  batch_size: 16
+  batch_size: 32
   learning_rate: 0.0003
   weight_decay: 0.1
-  num_epochs: 10
+  num_epochs: 30
   gradient_clip: 1.0
   checkpoint_dir: checkpoints
   resume: null

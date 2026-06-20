@@ -1,197 +1,193 @@
 # NanoQwenVL
 
-Vision-Language Model implementado do zero em PyTorch puro para estudo.
+A Vision-Language Model built from scratch in pure PyTorch for learning purposes.
 
-**22M parâmetros** • **Cabe numa T4 (6-16GB)** • **Sem dependências pesadas**
+**22M parameters** • **Fits on a T4 (6-16GB)** • **No heavy dependencies**
 
-## Arquitetura
+## Architecture
 
 ```
-Imagem ─→ ViT (patch 16, 6 blocks, 4 heads) ─→ Projector (MLP 256→512→256)
-                                                          │
-                                                    [visual tokens 197]
-                                                          │
+Image ─→ ViT (patch 16, 6 blocks, 4 heads) ─→ Projector (MLP 256→512→256)
+                                                         │
+                                                   [visual tokens 197]
+                                                         │
 Prompt ─→ Tokenizer ─→ [BOS, prompt...] ─→ Embedding ─── concat ─→ Decoder
-                                                                      │
-Resposta ←─ LM Head ←─── RMSNorm ←─── DecoderBlock ×6 ←─── RoPE ─── causal mask
-                                          │
-                                     SwiGLU FFN (8 heads, head_dim=32)
+                                                                     │
+Response ←── LM Head ←─── RMSNorm ←─── DecoderBlock ×6 ←─── RoPE ─── causal mask
+                                         │
+                                    SwiGLU FFN (8 heads, head_dim=32)
 ```
 
-| Componente | Detalhes |
+| Component | Details |
 |---|---|
 | **ViT** | Patch size 16, 224×224 → 197 tokens, 6 blocks, RMSNorm, GELU MLP |
 | **Projector** | MLP 256 → 512 → 256 |
 | **Decoder** | 6 layers, 8 heads (head_dim=32), RoPE (θ=10000), RMSNorm, SwiGLU, weight tying |
 
-### Modos de treino
-
-| Modo | config.yaml | Exemplo |
-|---|---|---|
-| img → caption | `prompt_template: null` | BOS + legenda |
-| img + prompt → resposta | `prompt_template: "Describe this image:"` | BOS + prompt + legenda |
-
-## Requisitos
+## Requirements
 
 - Python ≥ 3.10
 - PyTorch ≥ 2.0
 - torchvision
 - transformers
+- datasets
 - PyYAML
 - tqdm
 - Pillow
 
-## Quick start
+## DriveLM-nuScenes (Colab T4)
 
-```bash
-git clone https://github.com/seu-usuario/NanoQwenVL.git
-cd NanoQwenVL
-pip install -e .
-```
+Open [Google Colab](https://colab.research.google.com), select a **T4 GPU** runtime.
 
-### Treino no Colab
-
-Abra o Colab e execute célula por célula:
+### 1. Clone and install
 
 ```python
-# 1. Clonar e instalar
-!git clone https://github.com/seu-usuario/NanoQwenVL.git
+!git clone https://github.com/anomalyco/NanoQwenVL.git
 %cd NanoQwenVL
 !pip install -e .
+```
 
-# 2. Baixar Flickr8k
-!wget -q https://github.com/jbrownlee/Datasets/releases/download/Flickr8k/Flickr8k_text.zip
-!unzip -q Flickr8k_text.zip -d /tmp/flickr8k/text
-# As imagens precisam ser baixadas separadamente
-# (Kaggle: https://www.kaggle.com/datasets/adityajn105/flickr8k)
+### 2. Download nuScenes images
 
-# 3. Configurar (opcional)
-# Edite config.yaml para ajustar batch_size, synthetic, prompt_template etc.
+As anotações (5280 QA pairs) são carregadas automaticamente do HuggingFace (`ac4462/DriveLM-reasoning`). Você só precisa das imagens nuScenes.
 
-# 4. Treinar
+**Opção A —Subset oficial DriveLM (~1.6 GB, recomendado):**
+
+Preencha o [formulário do DriveLM](https://docs.google.com/forms/d/e/1FAIpQLSeX6CR3u-15IV-TKx2uPv1wiKjydjZ__NNW98H4nR5JZtQa2Q/viewform) e baixe `drivelm_nus_imgs_train.zip`. Depois:
+
+```python
+from google.colab import files
+# upload do zip
+!unzip -q drivelm_nus_imgs_train.zip -d /content/nuscenes
+```
+
+**Opção B — nuScenes completo (license-free para pesquisa):**
+
+Registre em [nuscenes.org](https://www.nuscenes.org) e baixe a pasta `samples/`. Coloque em `/content/nuscenes/samples/`.
+
+### 3. Train (30 épocas, ~15 min no T4)
+
+```python
 !python scripts/train.py --config config.yaml
-
-# 5. Inferência
-!python scripts/infer.py --checkpoint checkpoints/epoch_5.pt --image /path/to/foto.jpg
 ```
 
-### Treino local com dados sintéticos (teste rápido)
+config.yaml já vem pronto:
+- `dataset_type: drivelm_nus`
+- `nuscenes_root: /content/nuscenes/samples`
+- `batch_size: 32`, `num_epochs: 30`
+
+Expected:
+```
+Device: cuda
+Params: 22,047,488
+Train: 5280 samples
+Epoch 1/30  train loss=10.9  ppl=54000
+...
+Epoch 30/30  train loss=2.1  ppl=8.2
+```
+
+### 4. Test
+
+```python
+import os
+imgs = os.listdir("/content/nuscenes/samples/CAM_FRONT")
+test_img = os.path.join("/content/nuscenes/samples/CAM_FRONT", imgs[0])
+```
+
+```python
+!python scripts/infer.py \
+  --checkpoint checkpoints/epoch_30.pt \
+  --image "{test_img}" \
+  --max-tokens 64
+```
+
+---
+
+## Synthetic test (no images needed)
 
 ```bash
 python scripts/train.py --config config.yaml
 ```
 
-Por padrão (`synthetic: true`), gera imagens aleatórias com as legendas reais do Flickr8k. Ótimo para validar o pipeline.
-
-### Treino com imagens reais
-
-1. Baixe o [Flickr8k](https://www.kaggle.com/datasets/adityajn105/flickr8k) (~1GB)
-2. Extraia as imagens para uma pasta
-3. Edite `config.yaml`:
-
+Antes de rodar, mude no config.yaml:
 ```yaml
 data:
-  synthetic: false
-  image_dir: /caminho/Flickr8k_Dataset
+  dataset_type: flickr8k_hf
+  synthetic: true
 ```
 
-4. Treine:
+---
 
-```bash
-python scripts/train.py --config config.yaml
-```
+## Using another dataset
 
-## Configuração (`config.yaml`)
-
-```yaml
-model:
-  vit:
-    hidden_size: 256
-    num_layers: 6
-    num_heads: 4
-  decoder:
-    hidden_size: 256
-    num_layers: 6
-    num_heads: 8
-    intermediate_size: 512
-
-data:
-  dataset_type: flickr8k          # flickr8k | csv
-  synthetic: true                  # true = imagens aleatórias
-  prompt_template: "Describe this image:"  # null = img→caption
-  max_samples: 500                 # null = dataset completo
-
-training:
-  batch_size: 16
-  learning_rate: 0.0003
-  num_epochs: 10
-  checkpoint_dir: checkpoints
-```
-
-## Usar outro dataset
-
-### Opção 1: CSV
-
-Crie um arquivo TSV com duas colunas: `caminho_da_imagem\t legenda`:
+### CSV format
 
 ```yaml
 data:
   dataset_type: csv
-  csv_train: data/train.tsv
-  csv_val: data/val.tsv
+  csv_train: /path/to/train.tsv
+  csv_val: /path/to/val.tsv
 ```
 
-### Opção 2: Classe própria
+Formato: `image_path\t caption` por linha.
+
+### Custom class
 
 ```python
 from nanoqwenvl import ImageCaptionDataset
 
 class MeuDataset(ImageCaptionDataset):
-    def __init__(self, ..., prompt_template=None):
-        # Carregue seus dados
-        if prompt_template:
-            self.prompt_ids = tokenizer.encode(prompt_template)
-            self.num_prompt_tokens = 1 + len(self.prompt_ids)
-        else:
-            self.num_prompt_tokens = 1
+    def __init__(self, transform, tokenizer, max_seq_length, ...):
+        self.samples = [(img_path, pergunta, resposta), ...]
 
     def __len__(self):
         return len(self.samples)
 
     def __getitem__(self, idx):
-        # Retorna (image_tensor, token_ids)
-        return image, self._tokenize(caption)
+        ...
+        return image_tensor, token_ids
 ```
 
-Depois registre no `scripts/train.py` na função `create_dataset()`.
+Registre em `scripts/train.py → create_dataset()`.
 
-## Inferência
+### HuggingFace datasets
+
+```yaml
+data:
+  dataset_type: flickr8k_hf  # jxie/flickr8k
+```
+
+---
+
+## Inference
 
 ```bash
-# Modo img → caption (treinado sem prompt)
+# img → caption (prompt_template: null)
 python scripts/infer.py \
-  --checkpoint checkpoints/epoch_10.pt \
-  --image foto.jpg
+  --checkpoint checkpoints/epoch_30.pt \
+  --image /path/to/photo.jpg
 
-# Modo img + prompt → resposta
+# img + prompt → resposta (prompt_template definido)
 python scripts/infer.py \
-  --checkpoint checkpoints/epoch_10.pt \
-  --image foto.jpg \
+  --checkpoint checkpoints/epoch_30.pt \
+  --image /path/to/photo.jpg \
   --prompt "What is shown in this image?"
 ```
 
-## Parâmetros (22M)
+---
 
-| Submodelo | Params |
+## Parameter count (22M)
+
+| Submodel | Params |
 |---|---|
 | ViT | 4.9M |
 | Projector | 262K |
 | Embedding + LM Head | 12.8M (tied) |
-| Decoder (6×) | 3.9M |
+| Decoder (6× blocks) | 3.9M |
 | **Total** | **22.0M** |
 
-Em fp32: ~88 MB. Com AdamW: ~700 MB. Folga enorme em qualquer GPU com ≥ 6GB.
+fp32: ~88 MB. With AdamW optimizer: ~700 MB. Fits on any GPU ≥ 6GB.
 
-## Licença
+## License
 
 MIT
